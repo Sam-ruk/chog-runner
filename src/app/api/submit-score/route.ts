@@ -68,7 +68,6 @@ export async function POST(request: NextRequest) {
       transport: http(monadTestnet.rpcUrls.default.http[0]),
     });
 
-    // Gas settings
     const baseFeePerGas = 50_000_000_000n;
     const priorityFeePerGas = 12_400_000_000n;
     const maxFeePerGas = baseFeePerGas + priorityFeePerGas;
@@ -92,7 +91,6 @@ export async function POST(request: NextRequest) {
       gasLimit = 200_000n;
     }
 
-    // Check admin balance
     const adminBalance = await publicClient.getBalance({ address: adminAccount.address });
     const estimatedCost = gasLimit * maxFeePerGas;
     if (adminBalance < estimatedCost) {
@@ -104,7 +102,6 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // Simulate and submit transaction
     await publicClient.simulateContract({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: CONTRACT_ABI,
@@ -132,7 +129,6 @@ export async function POST(request: NextRequest) {
       nonce,
     });
 
-    // Wait for confirmation
     let receipt;
     let confirmAttempts = 0;
     const maxConfirmAttempts = 120;

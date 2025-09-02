@@ -5,9 +5,9 @@ import { useState, useEffect, ReactNode } from 'react';
 import { usePrivy, CrossAppAccountWithMetadata, useWallets, useSignTransaction } from '@privy-io/react-auth';
 import { createPublicClient, http, parseEther, formatUnits } from 'viem';
 
-const MONAD_GAMES_CROSS_APP_ID = 'cmd8euall0037le0my79qpz42';
-const CONTRACT_ADDRESS = '0xceCBFF203C8B6044F52CE23D914A1bfD997541A4';
-const ADMIN_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_ADDRESS || '0x6d6eD11fb83b202a04be03a4dd4548ace2addbf7';
+const MONAD_GAMES_CROSS_APP_ID = process.env.NEXT_PUBLIC_GAMES_APP_ID;
+const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS;
+const ADMIN_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_ADDRESS;
 
 const CONTRACT_ABI = [
   {

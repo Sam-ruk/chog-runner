@@ -197,20 +197,27 @@ export default function Navbar({ children }: NavbarProps) {
     }
   };
 
-  const fetchContractData = async (walletAddress: string) => {
+  const fetchContractData = async (walletAddress: `0x${string}`) => {
     try {
+      if (!CONTRACT_ADDRESS) {
+        throw new Error('CONTRACT_ADDRESS is not set in environment variables');
+      }
+      if (!CONTRACT_ADDRESS.match(/^0x[a-fA-F0-9]{40}$/)) {
+        throw new Error('Invalid CONTRACT_ADDRESS format');
+      }
+
       const [score, transactions] = await Promise.all([
         publicClient.readContract({
-          address: CONTRACT_ADDRESS,
+          address: CONTRACT_ADDRESS, 
           abi: CONTRACT_ABI,
           functionName: 'totalScoreOfPlayer',
-          args: [walletAddress],
+          args: [walletAddress as `0x${string}`], 
         }),
         publicClient.readContract({
           address: CONTRACT_ADDRESS,
           abi: CONTRACT_ABI,
           functionName: 'totalTransactionsOfPlayer',
-          args: [walletAddress],
+          args: [walletAddress as `0x${string}`],
         }),
       ]);
       
@@ -218,6 +225,7 @@ export default function Navbar({ children }: NavbarProps) {
       setGlobalTransactions(Number(transactions));
     } catch (err) {
       console.error('Error fetching contract data:', err);
+      showDialog('Failed to fetch contract data.');
     }
   };
 

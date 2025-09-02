@@ -5,9 +5,9 @@ import { useState, useEffect, ReactNode } from 'react';
 import { usePrivy, CrossAppAccountWithMetadata, useWallets, useSignTransaction } from '@privy-io/react-auth';
 import { createPublicClient, http, parseEther, formatUnits } from 'viem';
 
-const MONAD_GAMES_CROSS_APP_ID = process.env.NEXT_PUBLIC_GAMES_APP_ID as `0x${string}` | undefined;
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}` | undefined;
-const ADMIN_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_ADDRESS as `0x${string}` | undefined;
+const MONAD_GAMES_CROSS_APP_ID = 'cmd8euall0037le0my79qpz42';
+const CONTRACT_ADDRESS = '0xceCBFF203C8B6044F52CE23D914A1bfD997541A4';
+const ADMIN_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_ADDRESS || '0x6d6eD11fb83b202a04be03a4dd4548ace2addbf7';
 
 const CONTRACT_ABI = [
   {
@@ -141,12 +141,6 @@ export default function Navbar({ children }: NavbarProps) {
       return;
     }
 
-    if (!MONAD_GAMES_CROSS_APP_ID) {
-      showDialog('MONAD_GAMES_CROSS_APP_ID is not set in environment variables.');
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setDialog(null);
 
@@ -156,17 +150,11 @@ export default function Navbar({ children }: NavbarProps) {
 
     if (crossAppAccount?.embeddedWallets?.length > 0) {
       const globalWallet = crossAppAccount.embeddedWallets[0].address;
-      if (!globalWallet.match(/^0x[a-fA-F0-9]{40}$/)) {
-        showDialog('Invalid wallet address format.');
-        setLoading(false);
-        return;
-      }
-
-      setGlobalWalletAddress(globalWallet as `0x${string}`);
+      setGlobalWalletAddress(globalWallet);
       
       Promise.all([
         fetchUsername(globalWallet),
-        fetchContractData(globalWallet as `0x${string}`), 
+        fetchContractData(globalWallet),
         fetchLeaderboard(),
       ]).finally(() => setLoading(false));
     } else {
@@ -176,15 +164,9 @@ export default function Navbar({ children }: NavbarProps) {
 
     const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
     if (embeddedWallet) {
-      const embeddedAddress = embeddedWallet.address;
-      if (!embeddedAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
-        showDialog('Invalid embedded wallet address format.');
-        setLoading(false);
-        return;
-      }
-      setEmbeddedWalletAddress(embeddedAddress as `0x${string}`);
+      setEmbeddedWalletAddress(embeddedWallet.address);
     } else {
-      showDialog('Embedded wallet not found. Please try logging in again.');
+      // showDialog('Embedded wallet not found. Please try logging in again.');
       setLoading(false);
     }
   }, [ready, authenticated, user, wallets]);
@@ -215,27 +197,20 @@ export default function Navbar({ children }: NavbarProps) {
     }
   };
 
-  const fetchContractData = async (walletAddress: `0x${string}`) => {
+  const fetchContractData = async (walletAddress: string) => {
     try {
-      if (!CONTRACT_ADDRESS) {
-        throw new Error('CONTRACT_ADDRESS is not set in environment variables');
-      }
-      if (!CONTRACT_ADDRESS.match(/^0x[a-fA-F0-9]{40}$/)) {
-        throw new Error('Invalid CONTRACT_ADDRESS format');
-      }
-
       const [score, transactions] = await Promise.all([
         publicClient.readContract({
-          address: CONTRACT_ADDRESS, 
+          address: CONTRACT_ADDRESS,
           abi: CONTRACT_ABI,
           functionName: 'totalScoreOfPlayer',
-          args: [walletAddress as `0x${string}`], 
+          args: [walletAddress],
         }),
         publicClient.readContract({
           address: CONTRACT_ADDRESS,
           abi: CONTRACT_ABI,
           functionName: 'totalTransactionsOfPlayer',
-          args: [walletAddress as `0x${string}`],
+          args: [walletAddress],
         }),
       ]);
       
@@ -243,7 +218,6 @@ export default function Navbar({ children }: NavbarProps) {
       setGlobalTransactions(Number(transactions));
     } catch (err) {
       console.error('Error fetching contract data:', err);
-      showDialog('Failed to fetch contract data.');
     }
   };
 

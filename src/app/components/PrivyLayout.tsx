@@ -20,7 +20,7 @@ const monadTestnet = {
   },
 };
 
-export default function Layout({ children }: { children: ReactNode }) {
+export default function PrivyLayout({ children }: { children: ReactNode }) {
   if (!process.env.NEXT_PUBLIC_PRIVY_APP_ID) {
     throw new Error('NEXT_PUBLIC_PRIVY_APP_ID is not set in environment variables');
   }

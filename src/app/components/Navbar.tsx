@@ -141,6 +141,12 @@ export default function Navbar({ children }: NavbarProps) {
       return;
     }
 
+    if (!MONAD_GAMES_CROSS_APP_ID) {
+      showDialog('MONAD_GAMES_CROSS_APP_ID is not set in environment variables.');
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     setDialog(null);
 
@@ -150,11 +156,17 @@ export default function Navbar({ children }: NavbarProps) {
 
     if (crossAppAccount?.embeddedWallets?.length > 0) {
       const globalWallet = crossAppAccount.embeddedWallets[0].address;
-      setGlobalWalletAddress(globalWallet);
+      if (!globalWallet.match(/^0x[a-fA-F0-9]{40}$/)) {
+        showDialog('Invalid wallet address format.');
+        setLoading(false);
+        return;
+      }
+
+      setGlobalWalletAddress(globalWallet as `0x${string}`);
       
       Promise.all([
         fetchUsername(globalWallet),
-        fetchContractData(globalWallet),
+        fetchContractData(globalWallet as `0x${string}`), 
         fetchLeaderboard(),
       ]).finally(() => setLoading(false));
     } else {
@@ -164,9 +176,15 @@ export default function Navbar({ children }: NavbarProps) {
 
     const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
     if (embeddedWallet) {
-      setEmbeddedWalletAddress(embeddedWallet.address);
+      const embeddedAddress = embeddedWallet.address;
+      if (!embeddedAddress.match(/^0x[a-fA-F0-9]{40}$/)) {
+        showDialog('Invalid embedded wallet address format.');
+        setLoading(false);
+        return;
+      }
+      setEmbeddedWalletAddress(embeddedAddress as `0x${string}`);
     } else {
-      // showDialog('Embedded wallet not found. Please try logging in again.');
+      showDialog('Embedded wallet not found. Please try logging in again.');
       setLoading(false);
     }
   }, [ready, authenticated, user, wallets]);

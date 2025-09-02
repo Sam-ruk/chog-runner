@@ -6,9 +6,9 @@ import Leaderboard from './Leaderboard';
 
 interface ChogRunnerProps {
   score: number;
-  setScore: React.Dispatch<React.SetStateAction<number>>; // Updated to support functional updates
+  setScore: React.Dispatch<React.SetStateAction<number>>; 
   lives: number;
-  setLives: React.Dispatch<React.SetStateAction<number>>; // Updated to support functional updates
+  setLives: React.Dispatch<React.SetStateAction<number>>; 
   submitScore: () => Promise<void>;
   leaderboard: Array<{
     userId: number;
@@ -23,7 +23,7 @@ interface ChogRunnerProps {
   showDialog: (message: string) => void;
 }
 
-// Create fallback textures if images don't load
+// Fallback textures
 const createFallbackCanvas = (color: string, size = 64) => {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = size;
@@ -474,16 +474,16 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
 
  function applyEffect(effect: { points?: number; lives?: number }) {
   if (effect.points) {
-    setScore((prevScore: number) => prevScore + effect.points!); // Non-null assertion from previous fix
+    setScore((prevScore: number) => prevScore + effect.points!); 
   }
   if (effect.lives) {
     setLives((prevLives: number) => {
-      const newLives = Math.max(0, prevLives + effect.lives!); // Use non-null assertion
+      const newLives = Math.max(0, prevLives + effect.lives!); 
       if (newLives <= 0) {
         setTimeout(() => {
           setOver(true);
           stopLoop();
-        }, 100); // Small delay to ensure state update
+        }, 100); // Small delay
       }
       return newLives;
     });
@@ -542,10 +542,9 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
   try {
     await submitScore();
     setSubmitting(false);
-    setOver(false); // Close game over dialog only on successful submission
+    setOver(false); 
   } catch (error: any) {
     setSubmitting(false);
-    // Keep game over dialog open by not setting setOver(false)
     showDialog(error.message || 'Failed to submit score. Please try again.');
   }
 }

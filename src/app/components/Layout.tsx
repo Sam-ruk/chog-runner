@@ -37,22 +37,20 @@ export default function Layout({ children }: { children: ReactNode }) {
         defaultChain: monadTestnet,
         supportedChains: [monadTestnet],
         embeddedWallets: {
-          createOnLogin: 'all-users', // Create embedded wallet for all users on first login
+          createOnLogin: 'all-users', // Create embedded wallet
         },
         loginMethodsAndOrder: {
           primary: ['privy:cmd8euall0037le0my79qpz42'], // Monad Games ID
         },
         appearance: {
           theme: 'dark',
-          showWalletLoginFirst: false, // Don't show wallet login first
-          logo: undefined, // Remove Privy logo if you want
+          showWalletLoginFirst: false, 
+          logo: undefined, 
         },
-        // Remove extra legal dialogs that might cause popups
         legal: {
           termsAndConditionsUrl: undefined,
           privacyPolicyUrl: undefined,
         },
-        // Additional settings to reduce popup behavior
         mfa: {
           noPromptOnMfaRequired: false,
         },

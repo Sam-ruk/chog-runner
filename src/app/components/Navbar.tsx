@@ -9,7 +9,6 @@ const MONAD_GAMES_CROSS_APP_ID = 'cmd8euall0037le0my79qpz42';
 const CONTRACT_ADDRESS = '0xceCBFF203C8B6044F52CE23D914A1bfD997541A4';
 const ADMIN_ADDRESS = process.env.NEXT_PUBLIC_ADMIN_ADDRESS || '0x6d6eD11fb83b202a04be03a4dd4548ace2addbf7';
 
-// Smart contract ABI
 const CONTRACT_ABI = [
   {
     inputs: [{ internalType: 'address', name: '', type: 'address' }],
@@ -52,9 +51,9 @@ interface LeaderboardEntry {
 interface NavbarProps {
   children: (props: {
     score: number;
-    setScore: React.Dispatch<React.SetStateAction<number>>; // Updated to support functional updates
+    setScore: React.Dispatch<React.SetStateAction<number>>; 
     lives: number;
-    setLives: React.Dispatch<React.SetStateAction<number>>; // Updated to support functional updates
+    setLives: React.Dispatch<React.SetStateAction<number>>; 
     submitScore: () => Promise<void>;
     leaderboard: LeaderboardEntry[];
     globalWalletAddress: string | null;
@@ -92,17 +91,14 @@ export default function Navbar({ children }: NavbarProps) {
   const { wallets } = useWallets();
   const { signTransaction } = useSignTransaction();
 
-  // Show dialog for errors/messages
   const showDialog = (message: string) => {
     setDialog(message);
   };
 
-  // Close dialog
   const closeDialog = () => {
     setDialog(null);
   };
 
-  // Fetch embedded wallet balance
   const fetchEmbeddedWalletBalance = async (address: string) => {
     try {
       const balance = await publicClient.getBalance({ address: address as `0x${string}` });
@@ -113,7 +109,6 @@ export default function Navbar({ children }: NavbarProps) {
     }
   };
 
-  // Update balance every 5 seconds
   useEffect(() => {
     if (!embeddedWalletAddress) return;
 
@@ -125,10 +120,7 @@ export default function Navbar({ children }: NavbarProps) {
     return () => clearInterval(interval);
   }, [embeddedWalletAddress]);
 
-  // Fetch leaderboard (mock data used due to CORS)
   const fetchLeaderboard = async () => {
-    // Due to CORS, using mock data
-    // In production, ensure API allows CORS or use a proxy
     try {
       const res = await fetch('https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=244&sortBy=scores');
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -140,7 +132,6 @@ export default function Navbar({ children }: NavbarProps) {
     }
   };
 
-  // Check for Monad Games ID and embedded wallet
   useEffect(() => {
     if (!ready || !authenticated || !user?.linkedAccounts?.length) {
       resetState();
@@ -315,7 +306,7 @@ export default function Navbar({ children }: NavbarProps) {
     ]);
   } catch (err: any) {
     console.error('Score submission error:', err);
-    throw err; // Re-throw the error to be caught by handleSubmitScore
+    throw err; 
   } finally {
     setSubmitting(false);
   }
@@ -373,7 +364,6 @@ export default function Navbar({ children }: NavbarProps) {
     );
   }
 
-  // Show disconnect button when authenticated and has username
   return (
     <button
       className="text-lg flex items-center space-x-2 bg-black/30 hover:bg-black/50 text-white px-4 py-2 rounded"

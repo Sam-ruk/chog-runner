@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Jersey_15 } from "next/font/google";
-import Layout from "@/app/components/Layout"; // Import the new Component
+import Layout from "@/app/components/Layout";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   title: "ChogRunner",
   description: "Endless runner game.",
   icons: {
-    icon: "/heart.png", // Path to your favicon file
+    icon: "/heart.png", 
   },
 };
 

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Jersey_15 } from "next/font/google";
+import Layout from "@/app/components/Layout"; // Import the new  Component
 import "./globals.css";
 
 const geistSans = Geist({
@@ -21,7 +22,7 @@ const jersey15 = Jersey_15({
 
 export const metadata: Metadata = {
   title: "ChogRunner",
-  description: "A fun runner game",
+  description: "Endless runner game.",
 };
 
 export default function RootLayout({
@@ -34,7 +35,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${jersey15.variable} antialiased`}
       >
-        {children}
+        <Layout>{children}</Layout>
       </body>
     </html>
   );

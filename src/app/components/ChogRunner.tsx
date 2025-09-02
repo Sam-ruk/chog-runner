@@ -1,669 +1,681 @@
-"use client";
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+'use client';
+
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import Leaderboard from './Leaderboard';
 
-// Mock leaderboard data
-const mockLeaderboard = [
-  { wallet: "0x1234...abcd", score: 15420, rank: 1 },
-  { wallet: "0x5678...efgh", score: 12340, rank: 2 },
-  { wallet: "0x9abc...ijkl", score: 9876, rank: 3 },
-  { wallet: "0xdef0...mnop", score: 8765, rank: 4 },
-  { wallet: "0x2468...qrst", score: 7654, rank: 5 },
-  { wallet: "0x1357...uvwx", score: 6543, rank: 6 },
-  { wallet: "0x9753...yzab", score: 5432, rank: 7 },
-  { wallet: "0x1111...wxyz", score: 4321, rank: 8 },
-  { wallet: "0x2222...pqrs", score: 3210, rank: 9 },
-  { wallet: "0x3333...tuvw", score: 2100, rank: 10 },
-];
+interface ChogRunnerProps {
+  score: number;
+  setScore: React.Dispatch<React.SetStateAction<number>>; // Updated to support functional updates
+  lives: number;
+  setLives: React.Dispatch<React.SetStateAction<number>>; // Updated to support functional updates
+  submitScore: () => Promise<void>;
+  leaderboard: Array<{
+    userId: number;
+    username: string;
+    walletAddress: string;
+    score: number;
+    gameId: number;
+    gameName: string;
+    rank: number;
+  }>;
+  globalWalletAddress: string | null;
+  showDialog: (message: string) => void;
+}
 
-const ChogRunner = () => {
-  const canvasRef = useRef(null);
-  const gameRef = useRef({
-    scene: null,
-    camera: null,
-    renderer: null,
-    characterGroup: null,
-    obstacles: [],
-    animationId: null,
+// Create fallback textures if images don't load
+const createFallbackCanvas = (color: string, size = 64) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, size, size);
+  return canvas;
+};
+
+const ASSETS = {
+  chog: { 
+    texture: '/chog.png', 
+    scaleX: 4,
+    scaleY: 5.7,
+    fallback: () => createFallbackCanvas('#4A90E2')
+  },
+  star: { 
+    texture: '/star.png', 
+    scale: 3, 
+    effect: { points: 1 },
+    fallback: () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 64;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#FFD700';
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const angle = (i * 144 - 90) * Math.PI / 180;
+        const x = 32 + Math.cos(angle) * 20;
+        const y = 32 + Math.sin(angle) * 20;
+        ctx[i === 0 ? 'moveTo' : 'lineTo'](x, y);
+      }
+      ctx.closePath();
+      ctx.fill();
+      return canvas;
+    }
+  },
+  chest: { 
+    texture: '/chest.png', 
+    scale: 3.5, 
+    effect: { points: 2 },
+    fallback: () => createFallbackCanvas('#8B4513')
+  },
+  spiky: { 
+    texture: '/spiky.png', 
+    scale: 3, 
+    effect: { lives: -1 },
+    fallback: () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 64;
+      const ctx = canvas.getContext('2d')!;
+      ctx.fillStyle = '#FF4444';
+      ctx.beginPath();
+      ctx.moveTo(32, 8);
+      ctx.lineTo(48, 24);
+      ctx.lineTo(56, 32);
+      ctx.lineTo(48, 40);
+      ctx.lineTo(32, 56);
+      ctx.lineTo(16, 40);
+      ctx.lineTo(8, 32);
+      ctx.lineTo(16, 24);
+      ctx.closePath();
+      ctx.fill();
+      return canvas;
+    }
+  },
+  uwu: { 
+    texture: '/uwu.png', 
+    scale: 1,
+    fallback: () => createFallbackCanvas('#FF69B4')
+  },
+  monad: { 
+    texture: '/monad.png',
+    fallback: () => createFallbackCanvas('#9966CC')
+  },
+};
+
+// Lanes
+const LANE_WIDTH = 8;
+const LANES = [-LANE_WIDTH, 0, LANE_WIDTH];
+
+// Game tuning
+const MAX_OBSTACLES = 12;
+const BASE_SPEED = 0.04;
+const SPEED_GROWTH = 0.00005;
+const SPAWN_EVERY_MS = 450;
+const Z_START = -80;
+const Z_DESPAWN = 24;
+const HIT_Z_NEAR = 1.8;
+
+const TABLE = [
+  { key: 'star', w: 0.6 },
+  { key: 'chest', w: 0.2 },
+  { key: 'spiky', w: 0.2 },
+] as const;
+
+function pickType() {
+  const r = Math.random();
+  let acc = 0;
+  for (const t of TABLE) {
+    acc += t.w;
+    if (r <= acc) return t.key as keyof typeof ASSETS;
+  }
+  return 'star';
+}
+
+const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLives, submitScore, leaderboard, globalWalletAddress, showDialog }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const game = useRef({
+    scene: null as THREE.Scene | null,
+    camera: null as THREE.PerspectiveCamera | null,
+    renderer: null as THREE.WebGLRenderer | null,
+    textures: new Map<string, THREE.Texture>(),
+    sprites: new Map<string, THREE.SpriteMaterial>(),
+    player: null as THREE.Sprite | null,
+    obstacles: [] as Array<THREE.Sprite & { userData: any }>,
     lastSpawn: 0,
-    isInitialized: false,
-    isLoaded: false,
-    keys: {}
+    raf: 0 as number,
+    running: false,
+    speed: BASE_SPEED,
+    targetLane: 1,
+    currentLaneX: 0,
   });
 
-  const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3);
-  const [gameState, setGameState] = useState('intro');
-  const [currentLane, setCurrentLane] = useState(1);
-  const [speed, setSpeed] = useState(0.1);
+  const [lane, setLane] = useState(1);
+  const [started, setStarted] = useState(false);
+  const [over, setOver] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
-  const speedRef = useRef(0.01);
-  const laneRef = useRef(1);
-  const LANE_WIDTH = 8;
-  const LANE_POSITIONS = [-LANE_WIDTH, 0, LANE_WIDTH];
+  // Scene setup
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true });
 
-  // Create fallback textures
-  const createFallbackTexture = (color) => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 64;
-    canvas.height = 64;
-    const context = canvas.getContext('2d');
-    context.fillStyle = color;
-    context.fillRect(0, 0, 64, 64);
-    return new THREE.CanvasTexture(canvas);
-  };
-
-  const createGradientCanvas = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const context = canvas.getContext('2d');
-    const gradient = context.createLinearGradient(0, 0, 0, canvas.height);
-    gradient.addColorStop(0, '#4B0082');
-    gradient.addColorStop(1, '#D8BFD8');
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    return canvas;
-  };
-
-  const initGame = useCallback(() => {
-    if (!canvasRef.current || gameRef.current.isInitialized) {
-      return;
-    }
-
-    const game = gameRef.current;
     try {
-      game.isInitialized = true;
-      console.log("Initializing game...");
-
-      // Scene setup
-      game.scene = new THREE.Scene();
-      game.scene.fog = new THREE.Fog(0xc8a2c8, 20, 120);
-
-      // Camera setup
-      game.camera = new THREE.PerspectiveCamera(
-        75,
-        canvasRef.current.clientWidth / canvasRef.current.clientHeight,
-        0.1,
-        1000
-      );
-      game.camera.position.set(0, 12, 15);
-      game.camera.lookAt(0, 3, 0);
-
-      // Renderer setup
-      game.renderer = new THREE.WebGLRenderer({ 
-        canvas: canvasRef.current, 
-        antialias: true 
-      });
-      game.renderer.setSize(canvasRef.current.clientWidth, canvasRef.current.clientHeight);
-      game.renderer.shadowMap.enabled = true;
-      game.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-      // Background
-      const gradientTexture = new THREE.CanvasTexture(createGradientCanvas());
-      game.scene.background = gradientTexture;
-
-      // Lighting
-      const ambientLight = new THREE.AmbientLight(0xc8a2c8, 0.6);
-      game.scene.add(ambientLight);
-
-      const directionalLight = new THREE.DirectionalLight(0xc8a2c8, 0.9);
-      directionalLight.position.set(0, 30, 10);
-      directionalLight.castShadow = true;
-      directionalLight.shadow.mapSize.width = 2048;
-      directionalLight.shadow.mapSize.height = 2048;
-      game.scene.add(directionalLight);
-
-      createTrack();
-      loadCharacter(() => {
-        console.log("Character loaded, starting game loop");
-        game.isLoaded = true;
-      });
-
-      console.log("Game initialized successfully");
-    } catch (error) {
-      console.error("Error initializing game:", error);
-      game.isInitialized = false;
+      if ('outputColorSpace' in renderer) {
+        (renderer as any).outputColorSpace = THREE.SRGBColorSpace;
+      } else {
+        (renderer as any).outputEncoding = 3001;
+      }
+    } catch (e) {
+      console.warn('Could not set color space:', e);
     }
-  }, []);
 
-  const createTrack = () => {
-    const game = gameRef.current;
-    
-    // Walls
-    const wallGeometry = new THREE.BoxGeometry(2, 8, 200);
-    const wallMaterial = new THREE.MeshPhongMaterial({
-      color: 0xc8a2c8,
-      emissive: 0xc8a2c8,
-      emissiveIntensity: 0.3,
-    });
-    
-    const leftWall = new THREE.Mesh(wallGeometry, wallMaterial);
-    leftWall.position.set(-14, 4, 0);
-    leftWall.castShadow = true;
-    game.scene.add(leftWall);
-    
-    const rightWall = new THREE.Mesh(wallGeometry, wallMaterial);
-    rightWall.position.set(14, 4, 0);
-    rightWall.castShadow = true;
-    game.scene.add(rightWall);
-    
-    // Road
-    const roadGeometry = new THREE.PlaneGeometry(24, 200);
-    const roadMaterial = new THREE.MeshLambertMaterial({
-      color: 0x2a2a2a,
-      transparent: true,
-      opacity: 0.9
-    });
-    const road = new THREE.Mesh(roadGeometry, roadMaterial);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.0;
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(
+      70,
+      canvasRef.current.clientWidth / canvasRef.current.clientHeight,
+      0.1,
+      1000
+    );
+    camera.position.set(0, 8, 14);
+    camera.lookAt(0, 2, 0);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+    const hemi = new THREE.HemisphereLight(0xffffff, 0xbfd4ff, 0.4);
+    hemi.position.set(0, 50, 0);
+    scene.add(hemi);
+
+    const gradientTex = new THREE.CanvasTexture(makeGradient());
+    scene.background = gradientTex;
+
+    const roadW = LANE_WIDTH * 3 + 4;
+    const road = new THREE.Mesh(
+      new THREE.PlaneGeometry(roadW, 300),
+      new THREE.MeshBasicMaterial({ color: 0x6a6a6a })
+    );
     road.rotation.x = -Math.PI / 2;
-    road.position.set(0, 0, 0);
-    road.receiveShadow = true;
-    game.scene.add(road);
-    
-    // Lane dividers
-    for (let i = 0; i < 2; i++) {
-      const dividerGeometry = new THREE.BoxGeometry(0.2, 0.05, 200);
-      const dividerMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffffff,
-        transparent: true,
-        opacity: 0.8
-      });
-      const divider = new THREE.Mesh(dividerGeometry, dividerMaterial);
-      divider.position.set(LANE_POSITIONS[i] + LANE_WIDTH/2, 0.02, 0);
-      game.scene.add(divider);
+    road.position.set(0, 0, -20);
+    scene.add(road);
+
+    for (let i = 1; i <= 2; i++) {
+      const x = -roadW / 2 + (roadW / 3) * i;
+      const divider = new THREE.Mesh(
+        new THREE.BoxGeometry(0.15, 0.02, 300),
+        new THREE.MeshBasicMaterial({ color: 0xffffff })
+      );
+      divider.position.set(x, 0.01, -20);
+      scene.add(divider);
     }
 
-    // Background monad logo (fallback if texture fails)
-    const monadGeometry = new THREE.SphereGeometry(5, 16, 16);
-    const monadMaterial = new THREE.MeshPhongMaterial({
-      color: 0xffffff,
-      transparent: true,
-      opacity: 0.3,
-      emissive: 0xc8a2c8,
-      emissiveIntensity: 0.2
-    });
-    const monad = new THREE.Mesh(monadGeometry, monadMaterial);
-    monad.position.set(0, 8, -60);
-    game.scene.add(monad);
-  };
+    const wallGeo = new THREE.BoxGeometry(1, 6, 300);
+    const wallMat = new THREE.MeshBasicMaterial({ color: 0xd087fa });
+    const left = new THREE.Mesh(wallGeo, wallMat);
+    left.position.set(-roadW / 2 - 0.5, 3, -20);
+    const right = new THREE.Mesh(wallGeo, wallMat);
+    right.position.set(roadW / 2 + 0.5, 3, -20);
+    scene.add(left, right);
 
-  const loadCharacter = (onLoad) => {
-    const game = gameRef.current;
-    game.characterGroup = new THREE.Group();
-    
-    // Create character using geometry (fallback approach)
-    const chogGeometry = new THREE.SphereGeometry(1.5, 16, 16);
-    const chogMaterial = new THREE.MeshPhongMaterial({
-      color: 0xffffff,
-      emissive: 0xc8a2c8,
-      emissiveIntensity: 0.4,
-      shininess: 50
-    });
-    const chogSprite = new THREE.Mesh(chogGeometry, chogMaterial);
-    chogSprite.position.set(0, 1.5, 0);
-    chogSprite.castShadow = true;
-    game.characterGroup.add(chogSprite);
+    game.current.scene = scene;
+    game.current.camera = camera;
+    game.current.renderer = renderer;
+    game.current.currentLaneX = LANES[1];
+    game.current.targetLane = 1;
 
-    // Aura effect
-    const auraGeometry = new THREE.SphereGeometry(2.2, 16, 8);
-    const auraMaterial = new THREE.MeshBasicMaterial({
-      color: 0xc8a2c8,
-      transparent: true,
-      opacity: 0.3,
-      blending: THREE.AdditiveBlending
-    });
-    const aura = new THREE.Mesh(auraGeometry, auraMaterial);
-    aura.position.set(0, 1.5, 0);
-    game.characterGroup.add(aura);
+    const onResize = () => {
+      if (!canvasRef.current || !game.current.renderer || !game.current.camera) return;
+      const w = canvasRef.current.clientWidth;
+      const h = canvasRef.current.clientHeight;
+      game.current.renderer.setSize(w, h, false);
+      game.current.camera.aspect = w / h;
+      game.current.camera.updateProjectionMatrix();
+    };
+    onResize();
+    window.addEventListener('resize', onResize);
 
-    game.characterGroup.position.set(LANE_POSITIONS[laneRef.current], 0, 5);
-    game.scene.add(game.characterGroup);
-    
-    console.log("Character created with fallback geometry");
-    onLoad();
-  };
-
-  const spawnObstacle = () => {
-    const game = gameRef.current;
-    const lane = Math.floor(Math.random() * 3);
-    const type = Math.random();
-    
-    let color, effect;
-    
-    if (type < 0.6) { // Red = +1 point
-      color = 0xff0000;
-      effect = { points: 1 };
-    } else if (type < 0.8) { // Blue = +100 points
-      color = 0x0000ff;
-      effect = { points: 100 };
-    } else { // Green = -1 life
-      color = 0x00ff00;
-      effect = { lives: -1 };
-    }
-
-    const obstacleGeometry = new THREE.BoxGeometry(2, 2, 2);
-    const obstacleMaterial = new THREE.MeshPhongMaterial({
-      color: color,
-      emissive: color,
-      emissiveIntensity: 0.3
-    });
-    
-    const obstacle = new THREE.Mesh(obstacleGeometry, obstacleMaterial);
-    obstacle.position.set(LANE_POSITIONS[lane], 1, -60);
-    obstacle.castShadow = true;
-    obstacle.userData = { type: 'obstacle', lane, effect };
-    
-    game.obstacles.push(obstacle);
-    game.scene.add(obstacle);
-  };
-
-  const checkCollisions = () => {
-    const game = gameRef.current;
-    if (!game.characterGroup || game.obstacles.length === 0) return;
-
-    const playerBox = new THREE.Box3().setFromObject(game.characterGroup);
-
-    for (let i = game.obstacles.length - 1; i >= 0; i--) {
-      const obstacle = game.obstacles[i];
-      const obstacleBox = new THREE.Box3().setFromObject(obstacle);
-
-      if (playerBox.intersectsBox(obstacleBox)) {
-        const effect = obstacle.userData.effect;
-
-        if (effect.points !== undefined) {
-          setScore(prev => prev + effect.points);
-        }
-        if (effect.lives !== undefined) {
-          setLives(prev => {
-            const newLives = prev + effect.lives;
-            if (newLives <= 0) {
-              setGameState('gameOver');
-              return 0;
-            }
-            return newLives;
-          });
-        }
-
-        // Remove obstacle
-        game.scene.remove(obstacle);
-        obstacle.geometry.dispose();
-        obstacle.material.dispose();
-        game.obstacles.splice(i, 1);
+    const initGame = async () => {
+      try {
+        await loadTextures();
+        makePlayer();
+        makeBackdropSprite();
+        setLoading(false);
+        renderOnce();
+      } catch (error) {
+        console.error('Failed to initialize game:', error);
+        setLoading(false);
+        showDialog('Failed to initialize game. Using fallback assets.');
       }
-    }
-  };
-
-  const gameLoop = useCallback((timestamp) => {
-    const game = gameRef.current;
+    };
     
-    if (!game.scene || !game.camera || !game.renderer) {
-      console.warn("Missing game components");
-      return;
+    initGame();
+
+    function renderOnce() {
+      if (!game.current.renderer || !game.current.scene || !game.current.camera) return;
+      game.current.renderer.render(game.current.scene, game.current.camera);
     }
 
-    // Always render
-    game.renderer.render(game.scene, game.camera);
-    
-    // Game logic only when playing
-    if (gameState === 'playing' && game.isLoaded && game.characterGroup) {
-      // Spawn obstacles
-      if (!game.lastSpawn) game.lastSpawn = timestamp;
-      
-      if (timestamp - game.lastSpawn > 1000) { // Spawn every 1 second
-        spawnObstacle();
-        game.lastSpawn = timestamp;
-      }
-
-      // Update speed
-      speedRef.current = Math.min(speedRef.current + 0.0001, 0.2);
-      setSpeed(speedRef.current);
-
-      // Move obstacles
-      game.obstacles.forEach(obj => {
-        obj.position.z += speedRef.current * 10;
-        obj.rotation.y += 0.05;
-      });
-
-      // Remove obstacles that are too far
-      game.obstacles = game.obstacles.filter(obj => {
-        if (obj.position.z > 20) {
-          game.scene.remove(obj);
-          obj.geometry.dispose();
-          obj.material.dispose();
-          return false;
-        }
-        return true;
-      });
-
-      // Update character position
-      const targetX = LANE_POSITIONS[laneRef.current];
-      const currentX = game.characterGroup.position.x;
-      game.characterGroup.position.x = THREE.MathUtils.lerp(currentX, targetX, 0.15);
-
-      // Character animation
-      game.characterGroup.rotation.y += 0.02;
-
-      // Check collisions
-      checkCollisions();
-    }
-    
-    // Continue loop
-    game.animationId = requestAnimationFrame(gameLoop);
-  }, [gameState]);
-
-  const handleInput = useCallback((direction) => {
-    if (gameState !== 'playing') return;
-    
-    if (direction === 'left') {
-      const newLane = Math.max(0, currentLane - 1);
-      setCurrentLane(newLane);
-      laneRef.current = newLane;
-    } else if (direction === 'right') {
-      const newLane = Math.min(2, currentLane + 1);
-      setCurrentLane(newLane);
-      laneRef.current = newLane;
-    }
-  }, [gameState, currentLane]);
-
-  const handleKeyDown = useCallback((e) => {
-    switch(e.key.toLowerCase()) {
-      case 'arrowleft':
-      case 'a':
-        e.preventDefault();
-        handleInput('left');
-        break;
-      case 'arrowright':
-      case 'd':
-        e.preventDefault();
-        handleInput('right');
-        break;
-    }
-  }, [handleInput]);
-
-  // Initialize game
-  useEffect(() => {
-    if (canvasRef.current && !gameRef.current.isInitialized) {
-      initGame();
-    }
-  }, [initGame]);
-
-  // Start game loop
-  useEffect(() => {
-    if (gameRef.current.isInitialized && !gameRef.current.animationId) {
-      gameRef.current.animationId = requestAnimationFrame(gameLoop);
-    }
-  }, [gameLoop, gameState]);
-
-  // Keyboard controls
-  useEffect(() => {
-    if (gameState === 'playing') {
-      document.addEventListener('keydown', handleKeyDown);
-      return () => document.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [gameState, handleKeyDown]);
-
-  // Cleanup
-  useEffect(() => {
     return () => {
-      const game = gameRef.current;
-      if (game.animationId) {
-        cancelAnimationFrame(game.animationId);
-      }
-      
-      if (game.scene) {
-        game.scene.traverse((object) => {
-          if (object.geometry) object.geometry.dispose();
-          if (object.material) {
-            if (Array.isArray(object.material)) {
-              object.material.forEach(material => material.dispose());
-            } else {
-              object.material.dispose();
-            }
-          }
-        });
-      }
-      if (game.renderer) {
-        game.renderer.dispose();
-      }
+      window.removeEventListener('resize', onResize);
+      stopLoop();
+      game.current.renderer?.dispose();
+      game.current.scene = null;
+      game.current.camera = null;
+      game.current.renderer = null;
+      game.current.player = null;
+      game.current.obstacles = [];
+      game.current.textures.clear();
+      game.current.sprites.clear();
     };
   }, []);
 
-  const getMedalEmoji = (rank) => {
-    switch(rank) {
-      case 1: return '🥇';
-      case 2: return '🥈';
-      case 3: return '🥉';
-      default: return '🏆';
-    }
+  // Keyboard/touch
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!started || over) return;
+      const k = e.key.toLowerCase();
+      if (k === 'arrowleft' || k === 'a') move(-1);
+      if (k === 'arrowright' || k === 'd') move(1);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [started, over]);
+
+  useEffect(() => {
+    game.current.targetLane = lane;
+  }, [lane]);
+
+  // Controls
+  const move = (dir: -1 | 1) => {
+    setLane((prev) => Math.max(0, Math.min(2, prev + dir)));
   };
 
-  const startGame = () => {
-    const game = gameRef.current;
+  // Assets
+  async function loadTextures() {
+    const loader = new THREE.TextureLoader();
+    const entries = Object.entries(ASSETS) as Array<[keyof typeof ASSETS, any]>;
     
-    // Reset game state
+    for (const [k, v] of entries) {
+      try {
+        const tex = await new Promise<THREE.Texture>((resolve, reject) => {
+          loader.load(
+            v.texture,
+            (t) => {
+              t.colorSpace = THREE.SRGBColorSpace;
+              resolve(t);
+            },
+            undefined,
+            (err) => {
+              console.warn(`Failed to load texture ${v.texture}, using fallback`);
+              const fallbackCanvas = v.fallback();
+              const fallbackTex = new THREE.CanvasTexture(fallbackCanvas);
+              fallbackTex.colorSpace = THREE.SRGBColorSpace;
+              resolve(fallbackTex);
+            }
+          );
+        });
+        
+        game.current.textures.set(k, tex);
+        const mat = new THREE.SpriteMaterial({ 
+          map: tex, 
+          transparent: true, 
+          depthTest: true,
+          alphaTest: 0.1
+        });
+        game.current.sprites.set(k, mat);
+      } catch (error) {
+        console.error(`Error processing texture ${k}:`, error);
+        const fallbackCanvas = createFallbackCanvas('#ffffff');
+        const fallbackTex = new THREE.CanvasTexture(fallbackCanvas);
+        game.current.textures.set(k, fallbackTex);
+        const mat = new THREE.SpriteMaterial({ 
+          map: fallbackTex, 
+          transparent: true, 
+          depthTest: true 
+        });
+        game.current.sprites.set(k, mat);
+      }
+    }
+  }
+
+  function makePlayer() {
+    const scene = game.current.scene!;
+    
+    if (game.current.player) {
+      scene.remove(game.current.player);
+      game.current.player = null;
+    }
+    
+    const mat = game.current.sprites.get('chog');
+    if (!mat) {
+      console.error('Could not create player - no material found');
+      showDialog('Could not create player - no material found.');
+      return;
+    }
+    const s = new THREE.Sprite(mat.clone());
+    const asset = ASSETS.chog;
+    s.scale.set(asset.scaleX || 4, asset.scaleY || 4, 1);
+    s.position.set(LANES[1], 2, 6);
+    scene.add(s);
+    game.current.player = s as any;
+    game.current.currentLaneX = LANES[1];
+    game.current.targetLane = 1;
+    setLane(1);
+  }
+
+  function makeBackdropSprite() {
+  const scene = game.current.scene!;
+  const t = game.current.textures.get('monad');
+  if (!t) return;
+
+  // Create a Mesh with PlaneGeometry instead of Sprite
+  const geometry = new THREE.PlaneGeometry(20, 20); // Adjust size to match sprite
+  const material = new THREE.MeshStandardMaterial({
+    map: t,
+    transparent: true,
+    side: THREE.DoubleSide, // Render both sides like a Sprite
+    depthTest: false,
+    fog: false,
+  });
+  const backdrop = new THREE.Mesh(geometry, material);
+  const w = 20;
+  const h = t.image && t.image.height ? (w * (t.image.height / t.image.width)) : w;
+  backdrop.scale.set(w, h, 1);
+  backdrop.position.set(0, 10, -50);
+  backdrop.castShadow = true; // Mesh supports castShadow
+  scene.add(backdrop);
+
+  const shadowLight = new THREE.DirectionalLight(0xffffff, 0.5);
+  shadowLight.position.set(0, 20, 10);
+  shadowLight.castShadow = true;
+  shadowLight.shadow.mapSize.width = 1024;
+  shadowLight.shadow.mapSize.height = 1024;
+  shadowLight.shadow.camera.near = 0.1;
+  shadowLight.shadow.camera.far = 100;
+  scene.add(shadowLight);
+
+  game.current.renderer!.shadowMap.enabled = true;
+  game.current.renderer!.shadowMap.type = THREE.PCFSoftShadowMap;
+  const road = scene.children.find(c => c instanceof THREE.Mesh && c.geometry instanceof THREE.PlaneGeometry);
+  if (road) road.receiveShadow = true;
+}
+
+  // Game loop
+  function loop(ts: number) {
+    if (!game.current.running) return;
+    const g = game.current;
+    const { scene, camera, renderer, player } = g;
+    if (!scene || !camera || !renderer || !player) return;
+
+    if (g.lastSpawn === 0) g.lastSpawn = ts;
+    if (ts - g.lastSpawn > SPAWN_EVERY_MS / (1 + (g.speed - BASE_SPEED) * 25)) {
+      if (g.obstacles.length < MAX_OBSTACLES) spawnObstacle();
+      g.lastSpawn = ts;
+    }
+
+    g.speed = Math.min(1.2, g.speed + SPEED_GROWTH);
+    for (const o of g.obstacles) {
+      o.position.z += g.speed * 5.5;
+    }
+
+    g.obstacles = g.obstacles.filter((o) => {
+      if (o.position.z > Z_DESPAWN) {
+        scene.remove(o);
+        return false;
+      }
+      return true;
+    });
+
+    const targetX = LANES[g.targetLane];
+    const lerpSpeed = 0.15;
+    g.currentLaneX += (targetX - g.currentLaneX) * lerpSpeed;
+    player.position.x = g.currentLaneX;
+
+    for (let i = g.obstacles.length - 1; i >= 0; i--) {
+      const o = g.obstacles[i];
+      const zDistance = Math.abs(o.position.z - player.position.z);
+      const playerLane = g.targetLane;
+      const obstacleLane = o.userData.lane;
+      const xDistance = Math.abs(player.position.x - o.position.x);
+      
+      const inSameLane = playerLane === obstacleLane;
+      const closeHorizontally = xDistance < 2.0;
+      const closeVertically = zDistance < HIT_Z_NEAR;
+      
+      if (inSameLane && closeHorizontally && closeVertically) {
+        console.log(`Collision! Player lane: ${playerLane}, Obstacle lane: ${obstacleLane}, X dist: ${xDistance.toFixed(2)}, Z dist: ${zDistance.toFixed(2)}`);
+        applyEffect(o.userData.effect);
+        scene.remove(o);
+        g.obstacles.splice(i, 1);
+      }
+    }
+
+    renderer.render(scene, camera);
+    g.raf = requestAnimationFrame(loop);
+  }
+
+  function spawnObstacle() {
+    const g = game.current;
+    const scene = g.scene!;
+    const key = pickType();
+    const obstacleKey = (key === 'chog') ? 'star' : key;
+    const mat = g.sprites.get(obstacleKey) || g.sprites.get('star')!;
+    const s = new THREE.Sprite(mat.clone()) as THREE.Sprite & { userData: any };
+    const laneIdx = (Math.random() * 3) | 0;
+    const scale = (ASSETS as any)[obstacleKey]?.scale ?? 3;
+    s.scale.set(scale, scale, 1);
+    s.position.set(LANES[laneIdx], 1.6, Z_START);
+    s.userData = { type: 'obstacle', lane: laneIdx, effect: (ASSETS as any)[obstacleKey]?.effect || {} };
+    scene.add(s);
+    g.obstacles.push(s);
+  }
+
+ function applyEffect(effect: { points?: number; lives?: number }) {
+  if (effect.points) {
+    setScore((prevScore: number) => prevScore + effect.points!); // Non-null assertion from previous fix
+  }
+  if (effect.lives) {
+    setLives((prevLives: number) => {
+      const newLives = Math.max(0, prevLives + effect.lives!); // Use non-null assertion
+      if (newLives <= 0) {
+        setTimeout(() => {
+          setOver(true);
+          stopLoop();
+        }, 100); // Small delay to ensure state update
+      }
+      return newLives;
+    });
+  }
+}
+
+  function startLoop() {
+    if (game.current.running) return;
+    game.current.running = true;
+    game.current.raf = requestAnimationFrame(loop);
+  }
+
+  function stopLoop() {
+    game.current.running = false;
+    if (game.current.raf) cancelAnimationFrame(game.current.raf);
+  }
+
+  function startGame() {
     setScore(0);
     setLives(3);
-    setSpeed(0.01);
-    setCurrentLane(1);
-    speedRef.current = 0.01;
-    laneRef.current = 1;
-    game.lastSpawn = 0;
-    
-    // Clear obstacles
-    game.obstacles.forEach(obj => {
-      if (game.scene) game.scene.remove(obj);
-      obj.geometry.dispose();
-      obj.material.dispose();
-    });
-    game.obstacles = [];
-    
-    // Reset character position
-    if (game.characterGroup) {
-      game.characterGroup.position.x = LANE_POSITIONS[1];
-    }
-    
-    setGameState('playing');
-  };
+    setLane(1);
+    setOver(false);
+    setStarted(true);
 
-  const resetGame = () => {
+    const g = game.current;
+    g.speed = BASE_SPEED;
+    g.lastSpawn = 0;
+    g.targetLane = 1;
+    g.currentLaneX = LANES[1];
+    
+    for (const o of g.obstacles) g.scene?.remove(o);
+    g.obstacles = [];
+    
+    makePlayer();
+    
+    startLoop();
+  }
+
+  function resetGame() {
+    if (!globalWalletAddress || globalWalletAddress.trim() === '') {
+      showDialog('Please connect a wallet to play again.');
+      return;
+    }
     startGame();
-  };
+  }
 
-  const goToMainMenu = () => {
-    const game = gameRef.current;
-    
-    // Clear obstacles
-    game.obstacles.forEach(obj => {
-      if (game.scene) game.scene.remove(obj);
-      obj.geometry.dispose();
-      obj.material.dispose();
-    });
-    game.obstacles = [];
-    
-    // Reset state
-    setScore(0);
-    setLives(3);
-    setCurrentLane(1);
-    setSpeed(0.01);
-    speedRef.current = 0.01;
-    laneRef.current = 1;
-    setGameState('intro');
-  };
+  async function handleSubmitScore() {
+  setSubmitting(true);
+
+  if (!globalWalletAddress || globalWalletAddress.trim() === '') {
+    showDialog('Please connect a wallet to submit your score.');
+    setSubmitting(false);
+    return;
+  }
+
+  try {
+    await submitScore();
+    setSubmitting(false);
+    setOver(false); // Close game over dialog only on successful submission
+  } catch (error: any) {
+    setSubmitting(false);
+    // Keep game over dialog open by not setting setOver(false)
+    showDialog(error.message || 'Failed to submit score. Please try again.');
+  }
+}
+  function makeGradient() {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 512;
+    const ctx = c.getContext('2d')!;
+    const g = ctx.createLinearGradient(0, 0, 0, c.height);
+    g.addColorStop(0, '#4B0082');
+    g.addColorStop(1, '#D8BFD8');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, c.width, c.height);
+    return c;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-200 via-pink-100 to-purple-300 text-gray-800 overflow-hidden">
-      <div className="flex h-screen flex-col lg:flex-row">
-        {/* Sidebar */}
-        <div className="lg:w-80 bg-gradient-to-b from-purple-200/70 to-pink-100/70 backdrop-blur-sm border-r border-purple-300/50 p-4 flex flex-col">
-          <h1 className="text-3xl font-bold mb-4 text-center text-purple-700">
-            CHOG RUNNER
-          </h1>
-          <div className="flex-1 overflow-y-auto">
-            <h2 className="text-xl font-bold mb-2 text-center text-purple-700">LEADERBOARD</h2>
-            <div className="space-y-2">
-              {mockLeaderboard.map((player, index) => (
-                <div 
-                  key={index}
-                  className={`flex items-center justify-between p-2 rounded-lg ${
-                    player.rank <= 3 
-                      ? 'bg-gradient-to-r from-yellow-300/60 to-orange-300/60 border border-yellow-400/50' 
-                      : 'bg-purple-100/60 border border-purple-300/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{getMedalEmoji(player.rank)}</span>
-                    <div>
-                      <div className="text-xs text-gray-600">{player.wallet}</div>
-                      <div className="text-sm font-bold text-purple-800">{player.score.toLocaleString()}</div>
+<div className="bg-gradient-to-br from-purple-200 via-blue-100 to-purple-300 text-gray-800 font-mono">
+<div className="flex" style={{ height: 'calc(100vh - 8rem)' }}>
+        {/* Sidebar - Leaderboard */}
+        <Leaderboard leaderboard={leaderboard} globalWalletAddress={globalWalletAddress}/>
+
+        {/* Main */}
+        <div className="flex-1 flex flex-col">
+<div className="flex-1 relative bg-black" style={{ height: 'calc(100vh - 8rem)' }}>
+            <canvas ref={canvasRef} className="w-full h-full" />
+
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/70">
+                <div className="text-white text-xl font-bold" style={{ fontFamily: 'var(--font-jersey-15)' }}>Loading...</div>
+              </div>
+            )}
+
+            {!started && !over && !loading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                <div className="bg-gradient-to-br from-white/80 to-purple-200/80 p-6 rounded-xl border-2 border-purple-400 shadow-[0_0_20px_rgba(251,207,232,0.4)] max-w-sm text-center">
+                  <h1 className="text-3xl font-bold mb-3 text-transparent bg-clip-text bg-gradient-to-r from-purple-700 to-blue-700" style={{ fontFamily: 'var(--font-jersey-15)' }}>
+                    CHOG RUNNER
+                  </h1>
+                 <div className="space-y-2 text-sm mb-4 text-black">
+                    <div className="flex items-center gap-2 justify-center">
+                      <img src="/star.png" alt="Star" className="w-6 h-6" />
+                      <span>Star = +1 point</span>
+                    </div>
+                    <div className="flex items-center gap-2 justify-center">
+                      <img src="/chest.png" alt="Chest" className="w-6 h-6" />
+                      <span>Chest = +2 points</span>
+                    </div>
+                    <div className="flex items-center gap-2 justify-center">
+                      <img src="/spiky.png" alt="Spiky" className="w-6 h-6" />
+                      <span>Spiky = -1 life</span>
                     </div>
                   </div>
-                  <div className="text-lg font-bold text-blue-700">#{player.rank}</div>
+                  <div className="text-md mb-4 space-y-2 text-black">
+                    <p><strong>Controls:</strong></p>
+                    <p>← → or A D: Change lanes</p>
+                    <p><strong>Note:</strong></p>
+                    <p>Maintain 0.03 MON balance in signer wallet to submit scores (Fee = 0.02 MON).</p>
+                  </div>
+                  <button
+                    onClick={startGame}
+                    disabled={loading}
+                    className="bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold px-4 py-2 rounded-full hover:scale-105 transition-all duration-300 shadow-lg hover:shadow-purple-400/50 disabled:opacity-50"
+                    style={{ fontFamily: 'var(--font-jersey-15)' }}
+                  >
+                    START
+                  </button>
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
+              </div>
+            )}
 
-        {/* Game Area */}
-        <div className="flex-1 flex flex-col relative">
-          {/* Intro Dialog */}
-          {gameState === 'intro' && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm">
-              <div className="bg-gradient-to-br from-white/95 to-purple-200/95 p-6 rounded-xl border-2 border-purple-400 shadow-2xl max-w-md text-center">
-                <h2 className="text-3xl font-bold mb-4 text-purple-700">CHOG RUNNER</h2>
-                <div className="space-y-3 text-sm mb-6 text-gray-700">
-                  <div className="flex items-center gap-3 justify-center">
-                    <div className="w-4 h-4 bg-red-500 rounded"></div>
-                    <span>Red = +1 point</span>
-                  </div>
-                  <div className="flex items-center gap-3 justify-center">
-                    <div className="w-4 h-4 bg-blue-500 rounded"></div>
-                    <span>Blue = +100 points (rare!)</span>
-                  </div>
-                  <div className="flex items-center gap-3 justify-center">
-                    <div className="w-4 h-4 bg-green-500 rounded"></div>
-                    <span>Green = -1 life</span>
+            {over && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                <div className="bg-gradient-to-br from-white/90 to-purple-200/90 p-6 rounded-xl border-2 border-purple-800 shadow-[0_0_20px_rgba(191,219,254,0.4)] max-w-sm text-center">
+                  <h2 className="text-2xl font-bold mb-3 text-purple-700" style={{ fontFamily: 'var(--font-jersey-15)' }}>GAME OVER</h2>
+                  <p className="text-lg mb-3 text-gray-700" style={{ fontFamily: 'var(--font-jersey-15)' }}>
+                    Final Score: <span className="text-purple-700">{score}</span>
+                  </p>
+                  <div className="space-y-2">
+                    <button
+                      onClick={resetGame}
+                      className="block w-full bg-gradient-to-r from-pink-400 to-pink-400 text-gray-800 font-bold px-4 py-2 rounded-full hover:scale-105 transition-all duration-300 shadow-lg"
+                      style={{ fontFamily: 'var(--font-jersey-15)' }}
+                    >
+                      TRY AGAIN
+                    </button>
+                    <button
+                      onClick={handleSubmitScore}
+                      disabled={submitting}
+                      className="block w-full bg-gradient-to-r from-purple-400 to-purple-400 text-gray-800 font-bold px-4 py-2 rounded-full hover:scale-105 transition-all duration-300 shadow-lg disabled:opacity-50"
+                      style={{ fontFamily: 'var(--font-jersey-15)' }}
+                    >
+                      {submitting ? 'Submitting...' : 'SUBMIT SCORE'}
+                    </button>
                   </div>
                 </div>
-                <div className="text-sm mb-6 text-gray-600 bg-gray-100/50 p-3 rounded-lg">
-                  <p className="font-bold mb-1">Controls:</p>
-                  <p>← → Arrow Keys or A/D: Change lanes</p>
-                  <p>Touch buttons on mobile</p>
-                </div>
+              </div>
+            )}
+
+            {started && !over && (
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2">
                 <button
-                  onClick={startGame}
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold px-8 py-3 rounded-full hover:scale-105 transition-all duration-300 shadow-lg text-lg"
-                >
-                  START GAME
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Game Over Dialog */}
-          {gameState === 'gameOver' && (
-            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-              <div className="bg-gradient-to-br from-white/95 to-purple-200/95 p-6 rounded-xl border-2 border-red-400 shadow-2xl max-w-sm text-center">
-                <h2 className="text-3xl font-bold mb-3 text-red-600">GAME OVER</h2>
-                <p className="text-xl mb-6 text-gray-700">
-                  Final Score: <span className="text-purple-700 font-bold">{score.toLocaleString()}</span>
-                </p>
-                <div className="space-y-3">
-                  <button
-                    onClick={resetGame}
-                    className="block w-full bg-gradient-to-r from-green-400 to-blue-400 text-white font-bold px-6 py-3 rounded-full hover:scale-105 transition-all duration-300 shadow-lg"
-                  >
-                    PLAY AGAIN
-                  </button>
-                  <button
-                    onClick={goToMainMenu}
-                    className="block w-full bg-gradient-to-r from-gray-400 to-gray-600 text-white font-bold px-6 py-3 rounded-full hover:scale-105 transition-all duration-300 shadow-lg"
-                  >
-                    MAIN MENU
-                  </button>
-                  <button
-                    className="block w-full bg-gradient-to-r from-yellow-400 to-orange-400 text-gray-800 font-bold px-6 py-3 rounded-full hover:scale-105 transition-all duration-300 shadow-lg"
-                  >
-                    SUBMIT SCORE
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Game HUD */}
-          {(gameState === 'playing' || gameState === 'gameOver') && (
-            <div className="bg-gradient-to-r from-purple-200/70 to-pink-100/70 backdrop-blur-sm border-b border-purple-300/50 p-3 flex justify-between items-center">
-              <div className="flex items-center gap-6 text-lg text-gray-700">
-                <div className="flex items-center gap-2">
-                  <span className="text-yellow-500">⭐</span>
-                  <span className="font-bold">{score.toLocaleString()}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {Array.from({ length: lives }).map((_, i) => (
-                    <span key={i} className="text-red-500">❤️</span>
-                  ))}
-                </div>
-                <div className="text-sm">
-                  Speed: {(speed * 50).toFixed(1)}x
-                </div>
-                <div className="text-sm">
-                  Lane: {currentLane + 1}
-                </div>
-              </div>
-              <button 
-                onClick={goToMainMenu}
-                className="bg-gradient-to-r from-purple-500 to-pink-400 text-white font-bold px-4 py-2 rounded-full hover:scale-105 transition-all duration-300 shadow-lg"
-              >
-                MENU
-              </button>
-            </div>
-          )}
-
-          {/* Game Canvas */}
-          <div className="flex-1 relative bg-black">
-            <canvas 
-              ref={canvasRef} 
-              className="w-full h-full"
-              style={{ display: 'block' }}
-            />
-            
-            {/* Mobile Controls */}
-            {gameState === 'playing' && (
-              <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex gap-4 z-10">
-                <button
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    handleInput('left');
+                  onMouseDown={() => move(-1)}
+                  onTouchStart={() => move(-1)}
+                  className="bg-transparent p-0 focus:outline-none shadow-[0_4px_6px_rgba(0,0,0,0)] hover:shadow-[0_6px_8px_rgba(0,0,0,0)] active:scale-95 transition-all"
+                  style={{ 
+                    backgroundImage: 'url(/left.png)', 
+                    backgroundSize: 'contain', 
+                    backgroundRepeat: 'no-repeat', 
+                    width: '60px', 
+                    height: '60px' 
                   }}
-                  onClick={() => handleInput('left')}
-                  className="w-16 h-16 bg-purple-500/80 text-white text-2xl rounded-full active:scale-90 transition-all duration-200 shadow-lg border-2 border-white/50"
                 >
-                  ←
+                  <span className="sr-only">Left</span>
                 </button>
                 <button
-                  onTouchStart={(e) => {
-                    e.preventDefault();
-                    handleInput('right');
+                  onMouseDown={() => move(1)}
+                  onTouchStart={() => move(1)}
+                  className="bg-transparent p-0 focus:outline-none shadow-[0_4px_6px_rgba(0,0,0,0)] hover:shadow-[0_6px_8px_rgba(0,0,0,0)] active:scale-95 transition-all"
+                  style={{ 
+                    backgroundImage: 'url(/right.png)', 
+                    backgroundSize: 'contain', 
+                    backgroundRepeat: 'no-repeat', 
+                    width: '60px', 
+                    height: '60px' 
                   }}
-                  onClick={() => handleInput('right')}
-                  className="w-16 h-16 bg-purple-500/80 text-white text-2xl rounded-full active:scale-90 transition-all duration-200 shadow-lg border-2 border-white/50"
                 >
-                  →
+                  <span className="sr-only">Right</span>
                 </button>
               </div>
             )}
           </div>
-
-          {/* Debug info (remove in production) */}
-          {gameState === 'playing' && (
-            <div className="absolute top-20 left-4 text-white bg-black/50 p-2 rounded text-xs">
-              <div>Obstacles: {gameRef.current.obstacles?.length || 0}</div>
-              <div>Loaded: {gameRef.current.isLoaded ? 'Yes' : 'No'}</div>
-              <div>Initialized: {gameRef.current.isInitialized ? 'Yes' : 'No'}</div>
-            </div>
-          )}
         </div>
       </div>
     </div>

@@ -529,6 +529,7 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
 
   try {
     await submitScore();
+    await new Promise(resolve => setTimeout(resolve, 1500));
     setSubmitting(false);
     setOver(false); 
   } catch (error: any) {

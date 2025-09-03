@@ -16,7 +16,7 @@ interface LeaderboardProps {
 }
 
 const Leaderboard: React.FC<LeaderboardProps> = ({ leaderboard, globalWalletAddress }) => {
-  console.log('Leaderboard prop:', leaderboard); 
+  // console.log('Leaderboard prop:', leaderboard); 
 
   return (
     <>

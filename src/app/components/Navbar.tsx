@@ -260,7 +260,7 @@ export default function Navbar({ children }: NavbarProps) {
             throw new Error(`Payment transaction reverted. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
           }
         } catch (err) {
-          console.log(`Payment confirmation attempt ${confirmAttempts + 1} failed:`, err);
+          // console.log(`Payment confirmation attempt ${confirmAttempts + 1} failed:`, err);
         }
         await new Promise(resolve => setTimeout(resolve, 1000));
         confirmAttempts++;

@@ -25,10 +25,10 @@ export default function PrivyLayout({ children }: { children: ReactNode }) {
     throw new Error('NEXT_PUBLIC_PRIVY_APP_ID is not set in environment variables');
   }
 
-  console.log('Privy config:', {
-    appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID,
-    rpcUrl: process.env.RPC_URL || 'https://testnet-rpc.monad.xyz',
-  });
+  // console.log('Privy config:', {
+  //   appId: process.env.NEXT_PUBLIC_PRIVY_APP_ID,
+  //   rpcUrl: process.env.RPC_URL || 'https://testnet-rpc.monad.xyz',
+  // });
 
   return (
     <PrivyProvider

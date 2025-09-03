@@ -433,7 +433,7 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
       const closeVertically = zDistance < HIT_Z_NEAR;
       
       if (inSameLane && closeHorizontally && closeVertically) {
-        console.log(`Collision! Player lane: ${playerLane}, Obstacle lane: ${obstacleLane}, X dist: ${xDistance.toFixed(2)}, Z dist: ${zDistance.toFixed(2)}`);
+        // console.log(`Collision! Player lane: ${playerLane}, Obstacle lane: ${obstacleLane}, X dist: ${xDistance.toFixed(2)}, Z dist: ${zDistance.toFixed(2)}`);
         applyEffect(o.userData.effect);
         scene.remove(o);
         g.obstacles.splice(i, 1);

@@ -640,14 +640,16 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
                     >
                       TRY AGAIN
                     </button>
-                    <button
-                      onClick={handleSubmitScore}
-                      disabled={submitting}
-                      className="block w-full bg-gradient-to-r from-purple-400 to-purple-400 text-gray-800 font-bold px-4 py-2 rounded-full hover:scale-105 transition-all duration-300 shadow-lg disabled:opacity-50"
-                      style={{ fontFamily: 'var(--font-jersey-15)' }}
-                    >
-                      {submitting ? 'Submitting...' : 'SUBMIT SCORE'}
-                    </button>
+                    {score != 0 && (
+                      <button
+                        onClick={handleSubmitScore}
+                        disabled={submitting}
+                        className="block w-full bg-gradient-to-r from-purple-400 to-purple-400 text-gray-800 font-bold px-4 py-2 rounded-full hover:scale-105 transition-all duration-300 shadow-lg disabled:opacity-50"
+                        style={{ fontFamily: 'var(--font-jersey-15)' }}
+                      >
+                        {submitting ? 'Submitting...' : 'SUBMIT SCORE'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

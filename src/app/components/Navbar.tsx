@@ -72,19 +72,7 @@ export default function Navbar({ children }: NavbarProps) {
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [dialog, setDialog] = useState<string | null>(null);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([
-    // Mock data due to CORS
-    { userId: 420, username: 'samk2', walletAddress: '0x76ED3aa770e06591f33a165e331560c43a71aA14', score: 80, gameId: 244, gameName: 'ChogRunner', rank: 1 },
-    { userId: 421, username: 'player2', walletAddress: '0x1234567890abcdef1234567890abcdef12345678', score: 70, gameId: 244, gameName: 'ChogRunner', rank: 2 },
-    { userId: 422, username: 'player3', walletAddress: '0xabcdef1234567890abcdef1234567890abcdef12', score: 60, gameId: 244, gameName: 'ChogRunner', rank: 3 },
-    { userId: 423, username: 'player4', walletAddress: '0x1111111111111111111111111111111111111111', score: 50, gameId: 244, gameName: 'ChogRunner', rank: 4 },
-    { userId: 424, username: 'player5', walletAddress: '0x2222222222222222222222222222222222222222', score: 40, gameId: 244, gameName: 'ChogRunner', rank: 5 },
-    { userId: 425, username: 'player6', walletAddress: '0x3333333333333333333333333333333333333333', score: 30, gameId: 244, gameName: 'ChogRunner', rank: 6 },
-    { userId: 426, username: 'player7', walletAddress: '0x4444444444444444444444444444444444444444', score: 20, gameId: 244, gameName: 'ChogRunner', rank: 7 },
-    { userId: 427, username: 'player8', walletAddress: '0x5555555555555555555555555555555555555555', score: 15, gameId: 244, gameName: 'ChogRunner', rank: 8 },
-    { userId: 428, username: 'player9', walletAddress: '0x6666666666666666666666666666666666666666', score: 10, gameId: 244, gameName: 'ChogRunner', rank: 9 },
-    { userId: 429, username: 'player10', walletAddress: '0x7777777777777777777777777777777777777777', score: 5, gameId: 244, gameName: 'ChogRunner', rank: 10 },
-  ]);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
 
   const { ready, authenticated, user, login, logout } = usePrivy();
   const { wallets } = useWallets();
@@ -221,95 +209,96 @@ export default function Navbar({ children }: NavbarProps) {
   };
 
   const submitScore = async () => {
-  if (!globalWalletAddress || !username) {
-    showDialog('Sign in using Monad Games ID to submit scores.');
-    return;
-  }
-
-  if (!embeddedWalletAddress) {
-    showDialog('No embedded wallet found for signing transactions.');
-    return;
-  }
-
-  setSubmitting(true);
-  setDialog(null);
-
-  try {
-    const wallet = wallets.find(w => w.address.toLowerCase() === embeddedWalletAddress.toLowerCase());
-    if (!wallet) {
-      throw new Error('Embedded wallet not found in Privy wallets.');
+    if (!globalWalletAddress || !username) {
+      showDialog('Sign in using Monad Games ID to submit scores.');
+      return;
     }
 
-    await wallet.switchChain(10143);
-
-    const balance = await publicClient.getBalance({ address: embeddedWalletAddress as `0x${string}` });
-    const requiredAmount = parseEther('0.02');
-    if (balance < requiredAmount) {
-      throw new Error(`Insufficient balance. Need 0.02 MON, but you have ${formatUnits(balance, 18)} MON.`);
+    if (!embeddedWalletAddress) {
+      showDialog('No embedded wallet found for signing transactions.');
+      return;
     }
 
-    const transactionRequest = {
-      to: ADMIN_ADDRESS as `0x${string}`,
-      value: parseEther('0.02'),
-    };
+    setSubmitting(true);
+    setDialog(null);
 
-    const { signature } = await signTransaction(transactionRequest, {
-      address: embeddedWalletAddress,
-    });
-
-    const paymentTxHash = await publicClient.sendRawTransaction({
-      serializedTransaction: signature,
-    });
-
-    let receipt;
-    let confirmAttempts = 0;
-    const maxConfirmAttempts = 120;
-    while (confirmAttempts < maxConfirmAttempts) {
-      try {
-        receipt = await publicClient.getTransactionReceipt({ hash: paymentTxHash });
-        if (receipt && receipt.status === 'success') break;
-        if (receipt && receipt.status === 'reverted') {
-          throw new Error(`Payment transaction reverted. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
-        }
-      } catch (err) {
-        console.log(`Payment confirmation attempt ${confirmAttempts + 1} failed:`, err);
+    try {
+      const wallet = wallets.find(w => w.address.toLowerCase() === embeddedWalletAddress.toLowerCase());
+      if (!wallet) {
+        throw new Error('Embedded wallet not found in Privy wallets.');
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      confirmAttempts++;
+
+      await wallet.switchChain(10143);
+
+      const balance = await publicClient.getBalance({ address: embeddedWalletAddress as `0x${string}` });
+      const requiredAmount = parseEther('0.02');
+      if (balance < requiredAmount) {
+        throw new Error(`Insufficient balance. Need 0.02 MON, but you have ${formatUnits(balance, 18)} MON.`);
+      }
+
+      const transactionRequest = {
+        to: ADMIN_ADDRESS as `0x${string}`,
+        value: parseEther('0.02'),
+      };
+
+      const { signature } = await signTransaction(transactionRequest, {
+        address: embeddedWalletAddress,
+      });
+
+      const paymentTxHash = await publicClient.sendRawTransaction({
+        serializedTransaction: signature,
+      });
+
+      let receipt;
+      let confirmAttempts = 0;
+      const maxConfirmAttempts = 120;
+      while (confirmAttempts < maxConfirmAttempts) {
+        try {
+          receipt = await publicClient.getTransactionReceipt({ hash: paymentTxHash });
+          if (receipt && receipt.status === 'success') break;
+          if (receipt && receipt.status === 'reverted') {
+            throw new Error(`Payment transaction reverted. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
+          }
+        } catch (err) {
+          console.log(`Payment confirmation attempt ${confirmAttempts + 1} failed:`, err);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        confirmAttempts++;
+      }
+
+      if (!receipt) {
+        throw new Error(`Payment transaction not confirmed within timeout. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
+      }
+
+      const response = await fetch('/api/submit-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerAddress: globalWalletAddress,
+          score,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit score.');
+      }
+
+      showDialog(`Score submitted! Signer: ${embeddedWalletAddress.slice(0, 6)}...${embeddedWalletAddress.slice(-4)}. `);
+      setTimeout(() => setDialog(null), 5000);
+
+      await fetchContractData(globalWalletAddress);
+      setTimeout(async () => {
+        await fetchLeaderboard();
+      }, 3000); 
+
+    } catch (err: any) {
+      console.error('Score submission error:', err);
+      throw err; 
+    } finally {
+      setSubmitting(false);
     }
-
-    if (!receipt) {
-      throw new Error(`Payment transaction not confirmed within timeout. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
-    }
-
-    const response = await fetch('/api/submit-score', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        playerAddress: globalWalletAddress,
-        score,
-      }),
-    });
-
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to submit score.');
-    }
-
-    showDialog(`Score submitted! Signer: ${embeddedWalletAddress.slice(0, 6)}...${embeddedWalletAddress.slice(-4)}. `);
-    setTimeout(() => setDialog(null), 5000);
-
-    await Promise.all([
-      fetchContractData(globalWalletAddress),
-      fetchLeaderboard(),
-    ]);
-  } catch (err: any) {
-    console.error('Score submission error:', err);
-    throw err; 
-  } finally {
-    setSubmitting(false);
-  }
-};
+  };
 
   const handleMonadGamesIDLogin = async () => {
     if (!ready) return;

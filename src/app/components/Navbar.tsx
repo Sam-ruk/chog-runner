@@ -221,95 +221,94 @@ export default function Navbar({ children }: NavbarProps) {
   };
 
   const submitScore = async () => {
-  if (!globalWalletAddress || !username) {
-    showDialog('Sign in using Monad Games ID to submit scores.');
-    return;
-  }
-
-  if (!embeddedWalletAddress) {
-    showDialog('No embedded wallet found for signing transactions.');
-    return;
-  }
-
-  setSubmitting(true);
-  setDialog(null);
-
-  try {
-    const wallet = wallets.find(w => w.address.toLowerCase() === embeddedWalletAddress.toLowerCase());
-    if (!wallet) {
-      throw new Error('Embedded wallet not found in Privy wallets.');
+    if (!globalWalletAddress || !username) {
+      showDialog('Sign in using Monad Games ID to submit scores.');
+      return;
     }
 
-    await wallet.switchChain(10143);
-
-    const balance = await publicClient.getBalance({ address: embeddedWalletAddress as `0x${string}` });
-    const requiredAmount = parseEther('0.02');
-    if (balance < requiredAmount) {
-      throw new Error(`Insufficient balance. Need 0.02 MON, but you have ${formatUnits(balance, 18)} MON.`);
+    if (!embeddedWalletAddress) {
+      showDialog('No embedded wallet found for signing transactions.');
+      return;
     }
 
-    const transactionRequest = {
-      to: ADMIN_ADDRESS as `0x${string}`,
-      value: parseEther('0.02'),
-    };
+    setSubmitting(true);
+    setDialog(null);
 
-    const { signature } = await signTransaction(transactionRequest, {
-      address: embeddedWalletAddress,
-    });
-
-    const paymentTxHash = await publicClient.sendRawTransaction({
-      serializedTransaction: signature,
-    });
-
-    let receipt;
-    let confirmAttempts = 0;
-    const maxConfirmAttempts = 120;
-    while (confirmAttempts < maxConfirmAttempts) {
-      try {
-        receipt = await publicClient.getTransactionReceipt({ hash: paymentTxHash });
-        if (receipt && receipt.status === 'success') break;
-        if (receipt && receipt.status === 'reverted') {
-          throw new Error(`Payment transaction reverted. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
-        }
-      } catch (err) {
-        console.log(`Payment confirmation attempt ${confirmAttempts + 1} failed:`, err);
+    try {
+      const wallet = wallets.find(w => w.address.toLowerCase() === embeddedWalletAddress.toLowerCase());
+      if (!wallet) {
+        throw new Error('Embedded wallet not found in Privy wallets.');
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      confirmAttempts++;
+
+      await wallet.switchChain(10143);
+
+      const balance = await publicClient.getBalance({ address: embeddedWalletAddress as `0x${string}` });
+      const requiredAmount = parseEther('0.02');
+      if (balance < requiredAmount) {
+        throw new Error(`Insufficient balance. Need 0.02 MON, but you have ${formatUnits(balance, 18)} MON.`);
+      }
+
+      const transactionRequest = {
+        to: ADMIN_ADDRESS as `0x${string}`,
+        value: parseEther('0.02'),
+      };
+
+      const { signature } = await signTransaction(transactionRequest, {
+        address: embeddedWalletAddress,
+      });
+
+      const paymentTxHash = await publicClient.sendRawTransaction({
+        serializedTransaction: signature,
+      });
+
+      let receipt;
+      let confirmAttempts = 0;
+      const maxConfirmAttempts = 120;
+      while (confirmAttempts < maxConfirmAttempts) {
+        try {
+          receipt = await publicClient.getTransactionReceipt({ hash: paymentTxHash });
+          if (receipt && receipt.status === 'success') break;
+          if (receipt && receipt.status === 'reverted') {
+            throw new Error(`Payment transaction reverted. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
+          }
+        } catch (err) {
+          console.log(`Payment confirmation attempt ${confirmAttempts + 1} failed:`, err);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        confirmAttempts++;
+      }
+
+      if (!receipt) {
+        throw new Error(`Payment transaction not confirmed within timeout. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
+      }
+
+      const response = await fetch('/api/submit-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          playerAddress: globalWalletAddress,
+          score,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit score.');
+      }
+
+      await fetchLeaderboard();
+      
+      await fetchContractData(globalWalletAddress);
+      
+      return { success: true, message: `Score submitted successfully! Signer: ${embeddedWalletAddress.slice(0, 6)}...${embeddedWalletAddress.slice(-4)}` };
+      
+    } catch (err: any) {
+      console.error('Score submission error:', err);
+      throw err; 
+    } finally {
+      setSubmitting(false);
     }
-
-    if (!receipt) {
-      throw new Error(`Payment transaction not confirmed within timeout. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
-    }
-
-    const response = await fetch('/api/submit-score', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        playerAddress: globalWalletAddress,
-        score,
-      }),
-    });
-
-    const result = await response.json();
-    if (!response.ok) {
-      throw new Error(result.error || 'Failed to submit score.');
-    }
-
-    showDialog(`Score submitted! Signer: ${embeddedWalletAddress.slice(0, 6)}...${embeddedWalletAddress.slice(-4)}. Check: ${result.explorer}`);
-    setTimeout(() => setDialog(null), 5000);
-
-    await Promise.all([
-      fetchContractData(globalWalletAddress),
-      fetchLeaderboard(),
-    ]);
-  } catch (err: any) {
-    console.error('Score submission error:', err);
-    throw err; 
-  } finally {
-    setSubmitting(false);
-  }
-};
+  };
 
   const handleMonadGamesIDLogin = async () => {
     if (!ready) return;

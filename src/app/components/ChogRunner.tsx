@@ -510,33 +510,51 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
     startLoop();
   }
 
+  async function handleSubmitScore() {
+    setSubmitting(true);
+
+    if (!globalWalletAddress || globalWalletAddress.trim() === '') {
+      showDialog('Please connect a wallet to submit your score.');
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      const result = await submitScore();
+      
+      if (result && result.success) {
+        setScore(0);
+        setLives(3);
+        setLane(1);
+        
+        const g = game.current;
+        g.speed = BASE_SPEED;
+        g.lastSpawn = 0;
+        g.targetLane = 1;
+        g.currentLaneX = LANES[1];
+        
+        for (const o of g.obstacles) g.scene?.remove(o);
+        g.obstacles = [];
+        makePlayer();
+        // showDialog(result.message + ' Game reset! You can play again or submit another score.');
+      }
+      
+    } catch (error: any) {
+      showDialog(error.message || 'Failed to submit score. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function resetGame() {
     if (!globalWalletAddress || globalWalletAddress.trim() === '') {
       showDialog('Please connect a wallet to play again.');
       return;
     }
+    showDialog('');
     startGame();
   }
 
-  async function handleSubmitScore() {
-  setSubmitting(true);
-
-  if (!globalWalletAddress || globalWalletAddress.trim() === '') {
-    showDialog('Please connect a wallet to submit your score.');
-    setSubmitting(false);
-    return;
-  }
-
-  try {
-    await submitScore();
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setSubmitting(false);
-    setOver(false); 
-  } catch (error: any) {
-    setSubmitting(false);
-    showDialog(error.message || 'Failed to submit score. Please try again.');
-  }
-}
   function makeGradient() {
     const c = document.createElement('canvas');
     c.width = 512; c.height = 512;

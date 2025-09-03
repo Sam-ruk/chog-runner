@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface LeaderboardEntry {
@@ -19,7 +20,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ leaderboard, globalWalletAddr
   return (
     <>
       {/* Desktop Leaderboard */}
-      <div className="hidden lg:block w-80 bg-gradient-to-b from-pink-200/70 to-blue-100/70 backdrop-blur-sm border-r border-pink-300/50 p-4 overflow-y-auto max-h-[calc(100vh-8rem)] purple-scrollbar">
+      <div className="hidden lg:block w-80 bg-gradient-to-b from-pink-200/70 to-purple-400/70 backdrop-blur-sm border-r border-pink-300/50 p-4 overflow-y-auto max-h-[calc(100vh-8rem)] purple-scrollbar">
         <h2 className="text-3xl font-bold mb-4 text-center text-purple-700" style={{ fontFamily: 'var(--font-jersey-15)' }}>LEADERBOARD</h2>
         <div className="space-y-2">
           {leaderboard.slice(0, 10).map((player, index) => (

@@ -346,7 +346,7 @@ export default function Navbar({ children }: NavbarProps) {
         onClick={handleMonadGamesIDLogin}
       >
         <img src="/wallet.png" alt="Wallet Icon" width={24} height={24} />
-        <span style={{ fontFamily: 'var(--font-jersey-15)' }}>Sign in</span>
+        <span style={{ fontFamily: 'var(--font-jersey-15)' }}>Sign in with Monad Games ID</span>
       </button>
     );
   }

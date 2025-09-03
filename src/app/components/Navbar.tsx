@@ -1,6 +1,5 @@
 'use client';
 
-import Image from 'next/image';
 import { useState, useEffect, ReactNode } from 'react';
 import { usePrivy, CrossAppAccountWithMetadata, useWallets, useSignTransaction } from '@privy-io/react-auth';
 import { createPublicClient, http, parseEther, formatUnits } from 'viem';
@@ -346,7 +345,7 @@ export default function Navbar({ children }: NavbarProps) {
         className="text-lg flex items-center space-x-2 bg-black/30 hover:bg-black/50 text-white px-4 py-2 rounded"
         onClick={handleMonadGamesIDLogin}
       >
-        <Image src="/wallet.png" alt="Wallet Icon" width={24} height={24} />
+        <img src="/wallet.png" alt="Wallet Icon" width={24} height={24} />
         <span style={{ fontFamily: 'var(--font-jersey-15)' }}>Sign in</span>
       </button>
     );
@@ -369,7 +368,7 @@ export default function Navbar({ children }: NavbarProps) {
       className="text-lg flex items-center space-x-2 bg-black/30 hover:bg-black/50 text-white px-4 py-2 rounded"
       onClick={logout}
     >
-      <Image src="/wallet.png" alt="Wallet Icon" width={24} height={24} />
+      <img src="/wallet.png" alt="Wallet Icon" width={24} height={24} />
       <span style={{ fontFamily: 'var(--font-jersey-15)' }}>Disconnect</span>
     </button>
   );
@@ -406,17 +405,17 @@ export default function Navbar({ children }: NavbarProps) {
             <span>Score: {score}</span>
             <div className="flex">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Image key={i} src="/pixelstar.png" alt="Star" width={20} height={20} />
+                <img key={i} src="/pixel-star.png" alt="Star" width={20} height={20} />
               ))}
             </div>
-          </div>
-          <div className="flex items-center space-x-2">
-            <span>Lives: </span>
-            <div className="flex">
-              {Array.from({ length: lives }).map((_, i) => (
-                <Image key={i} src="/pixelheart.png" alt="heart" width={20} height={20} />
-              ))}
             </div>
+            <div className="flex items-center space-x-2">
+              <span>Lives: </span>
+              <div className="flex">
+                {Array.from({ length: lives }).map((_, i) => (
+                  <img key={i} src="/pixel-heart.png" alt="heart" width={20} height={20} />
+                ))}
+              </div>
           </div>
         </div>
 

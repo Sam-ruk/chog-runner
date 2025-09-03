@@ -511,49 +511,67 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
   }
 
   async function handleSubmitScore() {
-    setSubmitting(true);
+  setSubmitting(true);
 
-    if (!globalWalletAddress || globalWalletAddress.trim() === '') {
-      showDialog('Please connect a wallet to submit your score.');
-      setSubmitting(false);
-      return;
-    }
-
-    try {
-      const result = await submitScore();
-      
-      if (result && result.success) {
-        setScore(0);
-        setLives(3);
-        setLane(1);
-        
-        const g = game.current;
-        g.speed = BASE_SPEED;
-        g.lastSpawn = 0;
-        g.targetLane = 1;
-        g.currentLaneX = LANES[1];
-        
-        for (const o of g.obstacles) g.scene?.remove(o);
-        g.obstacles = [];
-        makePlayer();
-        // showDialog(result.message + ' Game reset! You can play again or submit another score.');
-      }
-      
-    } catch (error: any) {
-      showDialog(error.message || 'Failed to submit score. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
+  if (!globalWalletAddress || globalWalletAddress.trim() === '') {
+    showDialog('Please connect a wallet to submit your score.');
+    setSubmitting(false);
+    return;
   }
 
-  function resetGame() {
-    if (!globalWalletAddress || globalWalletAddress.trim() === '') {
-      showDialog('Please connect a wallet to play again.');
-      return;
+  try {
+    const result = await submitScore();
+    
+    // Check if result exists and has success property
+    if (result && result.success) {
+      // Reset game state for new round while keeping game over dialog
+      setScore(0);
+      setLives(3);
+      setLane(1);
+      
+      // Reset game internals
+      const g = game.current;
+      g.speed = BASE_SPEED;
+      g.lastSpawn = 0;
+      g.targetLane = 1;
+      g.currentLaneX = LANES[1];
+      
+      // Clear obstacles
+      for (const o of g.obstacles) g.scene?.remove(o);
+      g.obstacles = [];
+      
+      // Reset player position
+      makePlayer();
+      
+      // Show success message but keep game over dialog open
+      showDialog(result.message + ' Game reset! You can play again or submit another score.');
+      
+      // Keep the game over state so dialog remains visible
+      // Don't call setOver(false) here
+    } else {
+      // Fallback for when submitScore doesn't return a result object
+      showDialog('Score submission completed. Please check if it was successful.');
     }
-    showDialog('');
-    startGame();
+    
+  } catch (error: any) {
+    showDialog(error.message || 'Failed to submit score. Please try again.');
+  } finally {
+    setSubmitting(false);
   }
+}
+
+function resetGame() {
+  if (!globalWalletAddress || globalWalletAddress.trim() === '') {
+    showDialog('Please connect a wallet to play again.');
+    return;
+  }
+  
+  // Close any existing dialogs first
+  showDialog('');
+  
+  // Start fresh game
+  startGame();
+}
 
   function makeGradient() {
     const c = document.createElement('canvas');

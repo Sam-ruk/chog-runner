@@ -53,7 +53,7 @@ interface NavbarProps {
     setScore: React.Dispatch<React.SetStateAction<number>>; 
     lives: number;
     setLives: React.Dispatch<React.SetStateAction<number>>; 
-    submitScore: () => Promise<void>;
+    submitScore: () => Promise<{ success: boolean; message: string } | void>;
     leaderboard: LeaderboardEntry[];
     globalWalletAddress: string | null;
     showDialog: (message: string) => void;
@@ -220,96 +220,101 @@ export default function Navbar({ children }: NavbarProps) {
     }
   };
 
-  const submitScore = async () => {
-    if (!globalWalletAddress || !username) {
-      showDialog('Sign in using Monad Games ID to submit scores.');
-      return;
+  const submitScore = async (): Promise<{ success: boolean; message: string } | void> => {
+  if (!globalWalletAddress || !username) {
+    showDialog('Sign in using Monad Games ID to submit scores.');
+    return;
+  }
+
+  if (!embeddedWalletAddress) {
+    showDialog('No embedded wallet found for signing transactions.');
+    return;
+  }
+
+  setSubmitting(true);
+  setDialog(null);
+
+  try {
+    const wallet = wallets.find(w => w.address.toLowerCase() === embeddedWalletAddress.toLowerCase());
+    if (!wallet) {
+      throw new Error('Embedded wallet not found in Privy wallets.');
     }
 
-    if (!embeddedWalletAddress) {
-      showDialog('No embedded wallet found for signing transactions.');
-      return;
+    await wallet.switchChain(10143);
+
+    const balance = await publicClient.getBalance({ address: embeddedWalletAddress as `0x${string}` });
+    const requiredAmount = parseEther('0.02');
+    if (balance < requiredAmount) {
+      throw new Error(`Insufficient balance. Need 0.02 MON, but you have ${formatUnits(balance, 18)} MON.`);
     }
 
-    setSubmitting(true);
-    setDialog(null);
+    const transactionRequest = {
+      to: ADMIN_ADDRESS as `0x${string}`,
+      value: parseEther('0.02'),
+    };
 
-    try {
-      const wallet = wallets.find(w => w.address.toLowerCase() === embeddedWalletAddress.toLowerCase());
-      if (!wallet) {
-        throw new Error('Embedded wallet not found in Privy wallets.');
-      }
+    const { signature } = await signTransaction(transactionRequest, {
+      address: embeddedWalletAddress,
+    });
 
-      await wallet.switchChain(10143);
+    const paymentTxHash = await publicClient.sendRawTransaction({
+      serializedTransaction: signature,
+    });
 
-      const balance = await publicClient.getBalance({ address: embeddedWalletAddress as `0x${string}` });
-      const requiredAmount = parseEther('0.02');
-      if (balance < requiredAmount) {
-        throw new Error(`Insufficient balance. Need 0.02 MON, but you have ${formatUnits(balance, 18)} MON.`);
-      }
-
-      const transactionRequest = {
-        to: ADMIN_ADDRESS as `0x${string}`,
-        value: parseEther('0.02'),
-      };
-
-      const { signature } = await signTransaction(transactionRequest, {
-        address: embeddedWalletAddress,
-      });
-
-      const paymentTxHash = await publicClient.sendRawTransaction({
-        serializedTransaction: signature,
-      });
-
-      let receipt;
-      let confirmAttempts = 0;
-      const maxConfirmAttempts = 120;
-      while (confirmAttempts < maxConfirmAttempts) {
-        try {
-          receipt = await publicClient.getTransactionReceipt({ hash: paymentTxHash });
-          if (receipt && receipt.status === 'success') break;
-          if (receipt && receipt.status === 'reverted') {
-            throw new Error(`Payment transaction reverted. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
-          }
-        } catch (err) {
-          console.log(`Payment confirmation attempt ${confirmAttempts + 1} failed:`, err);
+    let receipt;
+    let confirmAttempts = 0;
+    const maxConfirmAttempts = 120;
+    while (confirmAttempts < maxConfirmAttempts) {
+      try {
+        receipt = await publicClient.getTransactionReceipt({ hash: paymentTxHash });
+        if (receipt && receipt.status === 'success') break;
+        if (receipt && receipt.status === 'reverted') {
+          throw new Error(`Payment transaction reverted. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
         }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        confirmAttempts++;
+      } catch (err) {
+        console.log(`Payment confirmation attempt ${confirmAttempts + 1} failed:`, err);
       }
-
-      if (!receipt) {
-        throw new Error(`Payment transaction not confirmed within timeout. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
-      }
-
-      const response = await fetch('/api/submit-score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          playerAddress: globalWalletAddress,
-          score,
-        }),
-      });
-
-      const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'Failed to submit score.');
-      }
-
-      await fetchLeaderboard();
-      
-      await fetchContractData(globalWalletAddress);
-      
-      return { success: true, message: `Score submitted successfully! Signer: ${embeddedWalletAddress.slice(0, 6)}...${embeddedWalletAddress.slice(-4)}` };
-      
-    } catch (err: any) {
-      console.error('Score submission error:', err);
-      throw err; 
-    } finally {
-      setSubmitting(false);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      confirmAttempts++;
     }
-  };
 
+    if (!receipt) {
+      throw new Error(`Payment transaction not confirmed within timeout. Check: https://testnet.monadexplorer.com/tx/${paymentTxHash}`);
+    }
+
+    const response = await fetch('/api/submit-score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        playerAddress: globalWalletAddress,
+        score,
+      }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || 'Failed to submit score.');
+    }
+
+    // Force refresh leaderboard data
+    await fetchLeaderboard();
+    
+    // Update contract data
+    await fetchContractData(globalWalletAddress);
+    
+    // Return success result
+    return { 
+      success: true, 
+      message: `Score submitted successfully! Signer: ${embeddedWalletAddress.slice(0, 6)}...${embeddedWalletAddress.slice(-4)}` 
+    };
+    
+  } catch (err: any) {
+    console.error('Score submission error:', err);
+    throw err; 
+  } finally {
+    setSubmitting(false);
+  }
+};
   const handleMonadGamesIDLogin = async () => {
     if (!ready) return;
     

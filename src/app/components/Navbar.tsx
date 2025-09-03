@@ -121,7 +121,7 @@ export default function Navbar({ children }: NavbarProps) {
 
   const fetchLeaderboard = async () => {
     try {
-      const res = await fetch('https://monad-games-id-site.vercel.app/api/leaderboard?page=1&gameId=244&sortBy=scores');
+      const res = await fetch('https://samkdev.xyz/api/leaderboard?page=1&gameId=244&sortBy=scores');
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
       setLeaderboard(data.data || []);

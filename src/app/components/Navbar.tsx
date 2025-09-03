@@ -158,6 +158,22 @@ export default function Navbar({ children }: NavbarProps) {
     }
   }, [ready, authenticated, user, wallets]);
 
+  useEffect(() => {
+    const loadLeaderboard = async () => {
+      setLoading(true); 
+      try {
+        await fetchLeaderboard(); 
+      } catch (err) {
+        console.error('Error fetching leaderboard on mount:', err);
+        // showDialog('Failed to load leaderboard.');
+      } finally {
+        setLoading(false); 
+      }
+    };
+
+    loadLeaderboard();
+  }, []); 
+
   const resetState = () => {
     setGlobalWalletAddress(null);
     setEmbeddedWalletAddress(null);

@@ -406,7 +406,7 @@ export default function Navbar({ children }: NavbarProps) {
             <span>Score: {score}</span>
             <div className="flex">
               {Array.from({ length: 3 }).map((_, i) => (
-                <Image key={i} src="/pixel-star.png" alt="Star" width={20} height={20} />
+                <Image key={i} src="/pixelstar.png" alt="Star" width={20} height={20} />
               ))}
             </div>
           </div>
@@ -414,7 +414,7 @@ export default function Navbar({ children }: NavbarProps) {
             <span>Lives: </span>
             <div className="flex">
               {Array.from({ length: lives }).map((_, i) => (
-                <Image key={i} src="/pixel-heart.png" alt="heart" width={20} height={20} />
+                <Image key={i} src="/pixelheart.png" alt="heart" width={20} height={20} />
               ))}
             </div>
           </div>

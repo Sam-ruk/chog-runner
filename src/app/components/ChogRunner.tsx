@@ -366,41 +366,29 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
   }
 
   function makeBackdropSprite() {
-  const scene = game.current.scene!;
-  const t = game.current.textures.get('monad');
-  if (!t) return;
+    const scene = game.current.scene!;
+    const t = game.current.textures.get('monad');
+    if (!t) {
+      console.error('Monad texture not found');
+      return;
+    }
 
-  // Create a Mesh with PlaneGeometry instead of Sprite
-  const geometry = new THREE.PlaneGeometry(20, 20); // Adjust size to match sprite
-  const material = new THREE.MeshStandardMaterial({
-    map: t,
-    transparent: true,
-    side: THREE.DoubleSide, // Render both sides like a Sprite
-    depthTest: false,
-    fog: false,
-  });
-  const backdrop = new THREE.Mesh(geometry, material);
-  const w = 20;
-  const h = t.image && t.image.height ? (w * (t.image.height / t.image.width)) : w;
-  backdrop.scale.set(w, h, 1);
-  backdrop.position.set(0, 10, -50);
-  backdrop.castShadow = true; // Mesh supports castShadow
-  scene.add(backdrop);
-
-  const shadowLight = new THREE.DirectionalLight(0xffffff, 0.5);
-  shadowLight.position.set(0, 20, 10);
-  shadowLight.castShadow = true;
-  shadowLight.shadow.mapSize.width = 1024;
-  shadowLight.shadow.mapSize.height = 1024;
-  shadowLight.shadow.camera.near = 0.1;
-  shadowLight.shadow.camera.far = 100;
-  scene.add(shadowLight);
-
-  game.current.renderer!.shadowMap.enabled = true;
-  game.current.renderer!.shadowMap.type = THREE.PCFSoftShadowMap;
-  const road = scene.children.find(c => c instanceof THREE.Mesh && c.geometry instanceof THREE.PlaneGeometry);
-  if (road) road.receiveShadow = true;
-}
+    const geometry = new THREE.PlaneGeometry(5.5, 5);
+    const material = new THREE.MeshBasicMaterial({
+      map: t,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthTest: true,
+      fog: false,
+    });
+    const backdrop = new THREE.Mesh(geometry, material);
+    const w = 5;
+    const h = t.image && t.image.height ? (w * (t.image.height / t.image.width)) : w;
+    backdrop.scale.set(w, h, 1);
+    backdrop.position.set(0, 10, -100);
+    backdrop.castShadow = false; 
+    scene.add(backdrop);
+  }
 
   // Game loop
   function loop(ts: number) {

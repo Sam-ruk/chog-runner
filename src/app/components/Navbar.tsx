@@ -185,18 +185,19 @@ export default function Navbar({ children }: NavbarProps) {
 
   const fetchUsername = async (walletAddress: string) => {
     try {
-      const res = await fetch(`https://monad-games-id-site.vercel.app/api/check-wallet?wallet=${walletAddress}`);
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      
-      const data = await res.json();
-      if (data.hasUsername && data.user?.username) {
-        setUsername(data.user.username);
-      } else {
-        showDialog('No username found. Please register a username.');
-      }
-    } catch (err) {
-      console.error('Error fetching username:', err);
-      showDialog('Failed to verify username.');
+        const res = await fetch(`https://samkdev.xyz/api/check-wallet?wallet=${walletAddress}`);
+        if (!res.ok) throw new Error(`API error: ${res.status}`);
+  
+        const data = await res.json();
+        if (data.hasUsername && data.user?.username) {
+            setUsername(data.user.username);
+        } else {
+            showDialog('No username found. Please register a username.');
+        }
+    } 
+    catch (err) {
+        console.error('Error fetching username:', err);
+        showDialog('Failed to verify username.');
     }
   };
 

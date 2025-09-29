@@ -246,7 +246,6 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
       } catch (error) {
         console.error('Failed to initialize game:', error);
         setLoading(false);
-        showDialog('Failed to initialize game. Using fallback assets.');
       }
     };
     
@@ -351,7 +350,6 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
     const mat = game.current.sprites.get('chog');
     if (!mat) {
       console.error('Could not create player - no material found');
-      showDialog('Could not create player - no material found.');
       return;
     }
     const s = new THREE.Sprite(mat.clone());
@@ -537,9 +535,9 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
       makePlayer();
       
       if (result && 'success' in result && result.success) {
-        showDialog(result.message + ' Game reset! You can play again or submit another score.');
+        showDialog(result.message + ' Game reset!');
       } else {
-        showDialog('Score submission completed. Please check if it was successful.');
+        showDialog('Score submission completed.');
       }
       
     } catch (error: any) {
@@ -555,7 +553,6 @@ const ChogRunner: React.FC<ChogRunnerProps> = ({ score, setScore, lives, setLive
       return;
     }
     
-    showDialog('');
     startGame();
   }
 
